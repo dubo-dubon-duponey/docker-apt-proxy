@@ -4,7 +4,7 @@ set -o errexit -o errtrace -o functrace -o nounset -o pipefail
 export DEBIAN_DATE=2020-06-01
 export TITLE="Apt mirror & cacher"
 export DESCRIPTION="A dubo image for apt mirror & cacher"
-export IMAGE_NAME="apt-utils"
+export IMAGE_NAME="aptutil"
 
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$PWD}")" 2>/dev/null 1>&2 && pwd)/helpers.sh"
