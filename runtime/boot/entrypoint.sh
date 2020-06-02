@@ -7,12 +7,11 @@ set -o errexit -o errtrace -o functrace -o nounset -o pipefail
   exit 1
 }
 
-mkdir -p /data/go-apt-mirror
-
 LOG_LEVEL="${LOG_LEVEL:-info}"
 LOG_FORMAT="${LOG_FORMAT:-plain}"
 
 # Run once configured
-args=(apt-mirror -f /config/apt-mirror.toml -logfile /dev/stdout -logformat "$LOG_FORMAT" -loglevel "$LOG_LEVEL")
+#args=(apt-mirror -f /config/apt-mirror.toml -logfile /dev/stdout -logformat "$LOG_FORMAT" -loglevel "$LOG_LEVEL")
+args=(apt-cacher -f /config/apt-cacher.toml -logfile /dev/stdout -logformat "$LOG_FORMAT" -loglevel "$LOG_LEVEL")
 
 exec "${args[@]}" "$@"

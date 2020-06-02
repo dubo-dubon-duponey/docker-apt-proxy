@@ -18,8 +18,9 @@ RUN           arch="${TARGETPLATFORM#*/}"; \
 #######################
 # Builder custom
 #######################
+# XXX mirror is shit - it fails at the first network error, and does not "resume" the state
 # hadolint ignore=DL3006
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder
+FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-mirror
 
 ARG           GIT_REPO=github.com/dubo-dubon-duponey/aptutil
 ARG           GIT_VERSION=7f0cb3780c18e7ae5661c7655d4a65318f8c9c06
@@ -35,16 +36,36 @@ COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 RUN           chmod 555 /dist/boot/bin/*
 
 #######################
+# Builder custom (cacher)
+#######################
+# hadolint ignore=DL3006
+FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-cacher
+
+ARG           GIT_REPO=github.com/dubo-dubon-duponey/aptutil
+ARG           GIT_VERSION=7f0cb3780c18e7ae5661c7655d4a65318f8c9c06
+ARG           GO_LDFLAGS=""
+
+WORKDIR       $GOPATH/src/$GIT_REPO
+RUN           git clone git://$GIT_REPO .
+RUN           git checkout $GIT_VERSION
+RUN           arch="${TARGETPLATFORM#*/}"; \
+              env GOOS=linux GOARCH="${arch%/*}" go build -mod=vendor -v -ldflags "-s -w $GO_LDFLAGS" -o /dist/boot/bin/apt-cacher ./cmd/go-apt-cacher/main.go
+
+COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
+RUN           chmod 555 /dist/boot/bin/*
+
+
+#######################
 # Running image
 #######################
 # hadolint ignore=DL3006
 FROM          $RUNTIME_BASE                                                                                             AS runtime
 
-COPY          --from=builder --chown=$BUILD_UID:root /dist .
+COPY          --from=builder-cacher --chown=$BUILD_UID:root /dist .
 
 VOLUME        /data
 #VOLUME [ "/var/lib/aptutil", "/var/spool/go-apt-mirror", "/var/spool/go-apt-cacher"]
 
-#EXPOSE 3142
+EXPOSE        3142
 
 #WORKDIR "/var/lib/aptutil"

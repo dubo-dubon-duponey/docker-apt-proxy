@@ -1,11 +1,11 @@
 # Directory to store mirrored files and other control files.
 # The directory must be writable by go-apt-mirror.
-dir = "/data/go-apt-mirror"
+dir = "/data"
 
 # Maximum concurrent connections for an upstream server.
 # Setting this 0 disables limit on the number of connections.
 # Default: 10
-max_conns = 10
+max_conns = 3
 
 # log specifies logging configurations.
 # Details at https://godoc.org/github.com/cybozu-go/well#LogConfig
