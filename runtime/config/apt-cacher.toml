@@ -38,8 +38,9 @@ format = "plain"
 # mapping declares which prefix maps to a Debian repository URL.
 # prefix must match this regexp: ^[a-z0-9._-]+$
 [mapping]
-debian = "http://snapshot.debian.org/archive/debian"
-security = "http://snapshot.debian.org/archive/debian-security"
+archive = "https://snapshot.debian.org/archive"
+#debian = "http://snapshot.debian.org/archive/debian"
+#security = "http://snapshot.debian.org/archive/debian-security"
 
 #url = "http://snapshot.debian.org/archive/debian/20200115T000000Z"
 #url = "http://snapshot.debian.org/archive/debian-security/20200115T000000Z"

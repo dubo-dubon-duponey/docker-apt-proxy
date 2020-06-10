@@ -1,8 +1,9 @@
+ARG           BUILDER_BASE=dubodubonduponey/base@sha256:b51f084380bc1bd2b665840317b6f19ccc844ee2fc7e700bf8633d95deba2819
+ARG           RUNTIME_BASE=dubodubonduponey/base@sha256:d28e8eed3e87e8dc5afdd56367d3cf2da12a0003d064b5c62405afbe4725ee99
+
 #######################
 # Extra builder for healthchecker
 #######################
-ARG           BUILDER_BASE=dubodubonduponey/base@sha256:b51f084380bc1bd2b665840317b6f19ccc844ee2fc7e700bf8633d95deba2819
-ARG           RUNTIME_BASE=dubodubonduponey/base@sha256:d28e8eed3e87e8dc5afdd56367d3cf2da12a0003d064b5c62405afbe4725ee99
 # hadolint ignore=DL3006
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-healthcheck
 
@@ -13,7 +14,8 @@ WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone git://$GIT_REPO .
 RUN           git checkout $GIT_VERSION
 RUN           arch="${TARGETPLATFORM#*/}"; \
-              env GOOS=linux GOARCH="${arch%/*}" go build -mod=vendor -v -ldflags "-s -w" -o /dist/boot/bin/http-health ./cmd/http
+              env GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "-s -w" \
+                -o /dist/boot/bin/http-health ./cmd/http
 
 #######################
 # Builder custom
@@ -22,15 +24,15 @@ RUN           arch="${TARGETPLATFORM#*/}"; \
 # hadolint ignore=DL3006
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-mirror
 
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/aptutil
-ARG           GIT_VERSION=7f0cb3780c18e7ae5661c7655d4a65318f8c9c06
+ARG           GIT_REPO=github.com/cybozu-go/aptutil
+ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
 ARG           GO_LDFLAGS=""
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone git://$GIT_REPO .
 RUN           git checkout $GIT_VERSION
 RUN           arch="${TARGETPLATFORM#*/}"; \
-              env GOOS=linux GOARCH="${arch%/*}" go build -mod=vendor -v -ldflags "-s -w $GO_LDFLAGS" -o /dist/boot/bin/apt-mirror ./cmd/go-apt-mirror/main.go
+              env GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "-s -w $GO_LDFLAGS" -o /dist/boot/bin/apt-mirror ./cmd/go-apt-mirror/main.go
 
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 RUN           chmod 555 /dist/boot/bin/*
@@ -41,15 +43,15 @@ RUN           chmod 555 /dist/boot/bin/*
 # hadolint ignore=DL3006
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-cacher
 
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/aptutil
-ARG           GIT_VERSION=7f0cb3780c18e7ae5661c7655d4a65318f8c9c06
+ARG           GIT_REPO=github.com/cybozu-go/aptutil
+ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
 ARG           GO_LDFLAGS=""
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone git://$GIT_REPO .
 RUN           git checkout $GIT_VERSION
 RUN           arch="${TARGETPLATFORM#*/}"; \
-              env GOOS=linux GOARCH="${arch%/*}" go build -mod=vendor -v -ldflags "-s -w $GO_LDFLAGS" -o /dist/boot/bin/apt-cacher ./cmd/go-apt-cacher/main.go
+              env GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "-s -w $GO_LDFLAGS" -o /dist/boot/bin/apt-cacher ./cmd/go-apt-cacher/main.go
 
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 RUN           chmod 555 /dist/boot/bin/*
@@ -63,9 +65,11 @@ FROM          $RUNTIME_BASE                                                     
 
 COPY          --from=builder-cacher --chown=$BUILD_UID:root /dist .
 
+EXPOSE        3142/tcp
+
 VOLUME        /data
 #VOLUME [ "/var/lib/aptutil", "/var/spool/go-apt-mirror", "/var/spool/go-apt-cacher"]
 
-EXPOSE        3142
+ENV           HEALTHCHECK_URL="http://127.0.0.1:3142/archive?healthcheck=internal"
 
-#WORKDIR "/var/lib/aptutil"
+HEALTHCHECK   --interval=30s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
