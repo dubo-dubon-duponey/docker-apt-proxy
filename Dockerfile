@@ -58,18 +58,31 @@ RUN           chmod 555 /dist/boot/bin/*
 
 
 #######################
+# Builder assembly
+#######################
+FROM          $BUILDER_BASE                                                                                             AS builder
+
+COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
+COPY          --from=builder-cacher /dist/boot/bin /dist/boot/bin
+
+RUN           chmod 555 /dist/boot/bin/*; \
+              epoch="$(date --date "$BUILD_CREATED" +%s)"; \
+              find /dist/boot/bin -newermt "@$epoch" -exec touch --no-dereference --date="@$epoch" '{}' +;
+
+#######################
 # Running image
 #######################
 # hadolint ignore=DL3006
 FROM          $RUNTIME_BASE                                                                                             AS runtime
 
-COPY          --from=builder-cacher --chown=$BUILD_UID:root /dist .
+COPY          --from=builder --chown=$BUILD_UID:root /dist .
 
 EXPOSE        3142/tcp
 
 VOLUME        /data
-#VOLUME [ "/var/lib/aptutil", "/var/spool/go-apt-mirror", "/var/spool/go-apt-cacher"]
 
+# System constants, unlikely to ever require modifications in normal use
 ENV           HEALTHCHECK_URL="http://127.0.0.1:3142/archive?healthcheck=internal"
+ENV           PORT=3142
 
 HEALTHCHECK   --interval=30s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1

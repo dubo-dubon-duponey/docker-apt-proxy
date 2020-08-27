@@ -39,6 +39,8 @@ format = "plain"
 # prefix must match this regexp: ^[a-z0-9._-]+$
 [mapping]
 archive = "https://snapshot.debian.org/archive"
+debian = "http://deb.debian.org/debian"
+debian-security = "http://security.debian.org/debian-security"
 #debian = "http://snapshot.debian.org/archive/debian"
 #security = "http://snapshot.debian.org/archive/debian-security"
 
