@@ -13,8 +13,7 @@ ARG           GIT_VERSION=51ebf8ca3d255e0c846307bf72740f731e6210c3
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone git://$GIT_REPO .
 RUN           git checkout $GIT_VERSION
-RUN           arch="${TARGETPLATFORM#*/}"; \
-              env GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "-s -w" \
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
                 -o /dist/boot/bin/http-health ./cmd/http
 
 #######################
@@ -26,13 +25,12 @@ FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                           
 
 ARG           GIT_REPO=github.com/cybozu-go/aptutil
 ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
-ARG           GO_LDFLAGS=""
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone git://$GIT_REPO .
 RUN           git checkout $GIT_VERSION
-RUN           arch="${TARGETPLATFORM#*/}"; \
-              env GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "-s -w $GO_LDFLAGS" -o /dist/boot/bin/apt-mirror ./cmd/go-apt-mirror/main.go
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
+                -o /dist/boot/bin/apt-mirror ./cmd/go-apt-mirror/main.go
 
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 RUN           chmod 555 /dist/boot/bin/*
@@ -45,13 +43,12 @@ FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                           
 
 ARG           GIT_REPO=github.com/cybozu-go/aptutil
 ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
-ARG           GO_LDFLAGS=""
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone git://$GIT_REPO .
 RUN           git checkout $GIT_VERSION
-RUN           arch="${TARGETPLATFORM#*/}"; \
-              env GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "-s -w $GO_LDFLAGS" -o /dist/boot/bin/apt-cacher ./cmd/go-apt-cacher/main.go
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
+                -o /dist/boot/bin/apt-cacher ./cmd/go-apt-cacher/main.go
 
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 RUN           chmod 555 /dist/boot/bin/*
