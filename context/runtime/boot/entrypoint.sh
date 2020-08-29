@@ -7,11 +7,13 @@ set -o errexit -o errtrace -o functrace -o nounset -o pipefail
   exit 1
 }
 
-LOG_LEVEL="${LOG_LEVEL:-info}"
-LOG_FORMAT="${LOG_FORMAT:-plain}"
+apt-cacher -f /config/apt-cacher.toml -logfile /dev/stdout -logformat "${APT_LOG_FORMAT:-plain}" -loglevel "${APT_LOG_LEVEL:-error}" &
 
-# Run once configured
-#args=(apt-mirror -f /config/apt-mirror.toml -logfile /dev/stdout -logformat "$LOG_FORMAT" -loglevel "$LOG_LEVEL")
-args=(apt-cacher -f /config/apt-cacher.toml -logfile /dev/stdout -logformat "$LOG_FORMAT" -loglevel "$LOG_LEVEL")
-
-exec "${args[@]}" "$@"
+case "${1:-}" in
+  "hash-password")
+    exec caddy "$@"
+  ;;
+  *)
+    exec caddy run -config /config/caddy/main.conf --adapter caddyfile
+  ;;
+esac

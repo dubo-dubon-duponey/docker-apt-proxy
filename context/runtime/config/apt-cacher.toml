@@ -1,6 +1,6 @@
 # listen_address is the listening address of go-apt-cacher.
 # Default is ":3142".
-listen_address = ":3142"
+listen_address = "127.0.0.1:3142"
 
 # Interval to check updates for Release/InRelease files.
 # Default: 600 seconds
@@ -32,7 +32,7 @@ max_conns = 10
 # Details at https://godoc.org/github.com/cybozu-go/well#LogConfig
 [log]
 #filename = "/var/log/go-apt-cacher.log"
-level = "info"
+level = "error"
 format = "plain"
 
 # mapping declares which prefix maps to a Debian repository URL.

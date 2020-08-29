@@ -56,6 +56,23 @@ RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 RUN           chmod 555 /dist/boot/bin/*
 
+#######################
+# Caddy
+#######################
+# hadolint ignore=DL3006
+FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-caddy
+
+# This is 2.1.1+ with golang 1.15 support (08/21/2020)
+ARG           GIT_REPO=github.com/caddyserver/caddy
+ARG           GIT_VERSION=0279a57ac465b2920abf71d86203d9feac2015b5
+
+WORKDIR       $GOPATH/src/$GIT_REPO
+RUN           git clone https://$GIT_REPO .
+RUN           git checkout $GIT_VERSION
+
+# hadolint ignore=DL4006
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
+                -o /dist/boot/bin/caddy ./cmd/caddy
 
 #######################
 # Builder assembly
@@ -65,6 +82,7 @@ FROM          $BUILDER_BASE                                                     
 
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 COPY          --from=builder-cacher /dist/boot/bin /dist/boot/bin
+COPY          --from=builder-caddy /dist/boot/bin /dist/boot/bin
 
 RUN           chmod 555 /dist/boot/bin/*; \
               epoch="$(date --date "$BUILD_CREATED" +%s)"; \
@@ -78,12 +96,17 @@ FROM          $RUNTIME_BASE                                                     
 
 COPY          --from=builder --chown=$BUILD_UID:root /dist .
 
-EXPOSE        3142/tcp
+EXPOSE        8080/tcp
 
 VOLUME        /data
 
+ENV           USERNAME=dubo-dubon-duponey
+ENV           PASSWORD=base64_bcrypt_encoded_use_caddy_hash_password_to_generate
+ENV           REALM="My precious"
+ENV           LOG_LEVEL=info
+ENV           PORT=8080
+
 # System constants, unlikely to ever require modifications in normal use
 ENV           HEALTHCHECK_URL="http://127.0.0.1:3142/archive?healthcheck=internal"
-ENV           PORT=3142
 
 HEALTHCHECK   --interval=30s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
