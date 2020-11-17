@@ -18,12 +18,29 @@ RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's
                 -o /dist/boot/bin/http-health ./cmd/http
 
 #######################
+# Goello
+#######################
+# hadolint ignore=DL3006
+FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-goello
+
+ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
+ARG           GIT_VERSION=6f6c96ef8161467ab25be45fe3633a093411fcf2
+
+WORKDIR       $GOPATH/src/$GIT_REPO
+RUN           git clone git://$GIT_REPO .
+RUN           git checkout $GIT_VERSION
+# hadolint ignore=DL4006
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
+                -o /dist/boot/bin/goello-server ./cmd/server/main.go
+
+#######################
 # Builder custom
 #######################
 # XXX mirror is shit - it fails at the first network error, and does not "resume" the state
 # hadolint ignore=DL3006
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-mirror
 
+# April 2020
 ARG           GIT_REPO=github.com/cybozu-go/aptutil
 ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
 
@@ -40,6 +57,7 @@ RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's
 # hadolint ignore=DL3006
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-cacher
 
+# April 2020
 ARG           GIT_REPO=github.com/cybozu-go/aptutil
 ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
 
@@ -56,9 +74,9 @@ RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's
 # hadolint ignore=DL3006
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-caddy
 
-# This is 2.1.1+ with golang 1.15 support (08/21/2020)
+# This is 2.2.1 (11/16/2020)
 ARG           GIT_REPO=github.com/caddyserver/caddy
-ARG           GIT_VERSION=0279a57ac465b2920abf71d86203d9feac2015b5
+ARG           GIT_VERSION=385adf5d878939c381c7f73c771771d34523a1a7
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone https://$GIT_REPO .
@@ -67,22 +85,6 @@ RUN           git checkout $GIT_VERSION
 # hadolint ignore=DL4006
 RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
                 -o /dist/boot/bin/caddy ./cmd/caddy
-
-#######################
-# Goello
-#######################
-# hadolint ignore=DL3006
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-goello
-
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
-ARG           GIT_VERSION=6f6c96ef8161467ab25be45fe3633a093411fcf2
-
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone git://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
-                -o /dist/boot/bin/goello-server ./cmd/server/main.go
 
 #######################
 # Builder assembly
