@@ -153,7 +153,7 @@ VOLUME        /certs
 # Caddy uses this
 VOLUME        /tmp
 
-# Apt-cacher will use this - XXX should it be /tmp instead?
+# Apt-cacher will use this
 VOLUME        /data
 
 ENV           HEALTHCHECK_URL="http://127.0.0.1:10000/?healthcheck"
