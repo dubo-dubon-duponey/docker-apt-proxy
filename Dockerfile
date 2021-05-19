@@ -28,7 +28,7 @@ FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                           
 
 ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
 ARG           GIT_VERSION=3799b6035dd5c4d5d1c061259241a9bedda810d6
-ARG           BUILD_TARGET=./cmd/server/main.go
+ARG           BUILD_TARGET=./cmd/server
 ARG           BUILD_OUTPUT=goello-server
 ARG           BUILD_FLAGS="-s -w"
 
@@ -45,9 +45,9 @@ RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's
 # hadolint ignore=DL3006,DL3029
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-caddy
 
-# This is 2.3.0
+# This is 2.4.0
 ARG           GIT_REPO=github.com/caddyserver/caddy
-ARG           GIT_VERSION=1b453dd4fbea2f3a54362fb4c2115bab85cad1b7
+ARG           GIT_VERSION=bc2210247861340c644d9825ac2b2860f8c6e12a
 ARG           BUILD_TARGET=./cmd/caddy
 ARG           BUILD_OUTPUT=caddy
 ARG           BUILD_FLAGS="-s -w"
@@ -78,7 +78,7 @@ RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's
 #                -o /dist/boot/bin/apt-mirror ./cmd/go-apt-mirror/main.go
 
 #######################
-# Builder custom (cacher)
+# Main builder
 #######################
 # hadolint ignore=DL3006,DL3029
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-main
@@ -125,32 +125,37 @@ COPY          --from=builder --chown=$BUILD_UID:root /dist .
 ENV           PORT=4443
 EXPOSE        4443
 # Log verbosity for
-ENV           LOG_LEVEL=info
+ENV           LOG_LEVEL="warn"
 # Domain name to serve
-ENV           DOMAIN="apt.local"
+ENV           DOMAIN="apt-cache.local"
 # Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt
 ENV           TLS="internal"
 
-# Salt and realm in case access is authenticated
-ENV           SALT="eW91IGFyZSBzbyBzbWFydAo="
-ENV           REALM="My precious"
-# if authenticated, pass along a username and bcrypted password (call the container with the "hash" command to generate one)
+# Realm in case access is authenticated
+ENV           REALM="My Precious Realm"
+# Provide username and password here (call the container with the "hash" command to generate a properly encrypted password, otherwise, a random one will be generated)
 ENV           USERNAME=""
 ENV           PASSWORD=""
 
 ### mDNS broadcasting
 # Enable/disable mDNS support
-ENV           MDNS_ENABLED=true
+ENV           MDNS_ENABLED=false
 # Name is used as a short description for the service
-ENV           MDNS_NAME="Fancy Service Name"
+ENV           MDNS_NAME="Apt Cache mDNS display name"
 # The service will be annonced and reachable at $MDNS_HOST.local
-ENV           MDNS_HOST=apt-cache
-# Type being advertised
-ENV           MDNS_TYPE=_http._tcp
+ENV           MDNS_HOST="apt-cache"
+# Type to advertise
+ENV           MDNS_TYPE="_http._tcp"
 
+# Caddy certs will be stored here
+VOLUME        /certs
+
+# Caddy uses this
+VOLUME        /tmp
+
+# Apt-cacher will use this - XXX should it be /tmp instead?
 VOLUME        /data
 
-# System constants, unlikely to ever require modifications in normal use
-ENV           HEALTHCHECK_URL=http://127.0.0.1:10042/archive?healthcheck=internal
+ENV           HEALTHCHECK_URL="http://127.0.0.1:10000/?healthcheck"
 
-HEALTHCHECK   --interval=30s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
+HEALTHCHECK   --interval=120s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
