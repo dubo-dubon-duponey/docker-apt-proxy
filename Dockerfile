@@ -4,103 +4,97 @@ ARG           RUNTIME_BASE=dubodubonduponey/base@sha256:d28e8eed3e87e8dc5afdd563
 #######################
 # Extra builder for healthchecker
 #######################
-# hadolint ignore=DL3006,DL3029
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-healthcheck
 
 ARG           GIT_REPO=github.com/dubo-dubon-duponey/healthcheckers
-ARG           GIT_VERSION=51ebf8ca3d255e0c846307bf72740f731e6210c3
-ARG           BUILD_TARGET=./cmd/http
-ARG           BUILD_OUTPUT=http-health
-ARG           BUILD_FLAGS="-s -w"
+ARG           GIT_COMMIT=51ebf8ca3d255e0c846307bf72740f731e6210c3
+ARG           GO_BUILD_SOURCE=./cmd/http
+ARG           GO_BUILD_OUTPUT=http-health
+ARG           GO_LD_FLAGS="-s -w"
+ARG           GO_TAGS=""
 
 WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone git://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v \
-                -ldflags "$BUILD_FLAGS" -o /dist/boot/bin/"$BUILD_OUTPUT" "$BUILD_TARGET"
+RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+# hadolint ignore=SC2046
+RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
+                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
 # Goello
 #######################
-# hadolint ignore=DL3006,DL3029
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-goello
 
 ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
-ARG           GIT_VERSION=3799b6035dd5c4d5d1c061259241a9bedda810d6
-ARG           BUILD_TARGET=./cmd/server
-ARG           BUILD_OUTPUT=goello-server
-ARG           BUILD_FLAGS="-s -w"
+ARG           GIT_COMMIT=3799b6035dd5c4d5d1c061259241a9bedda810d6
+ARG           GO_BUILD_SOURCE=./cmd/server
+ARG           GO_BUILD_OUTPUT=goello-server
+ARG           GO_LD_FLAGS="-s -w"
+ARG           GO_TAGS=""
 
 WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone git://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v \
-                -ldflags "$BUILD_FLAGS" -o /dist/boot/bin/"$BUILD_OUTPUT" "$BUILD_TARGET"
+RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+# hadolint ignore=SC2046
+RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
+                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
 # Caddy
 #######################
-# hadolint ignore=DL3006,DL3029
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-caddy
 
 # This is 2.4.0
 ARG           GIT_REPO=github.com/caddyserver/caddy
-ARG           GIT_VERSION=bc2210247861340c644d9825ac2b2860f8c6e12a
-ARG           BUILD_TARGET=./cmd/caddy
-ARG           BUILD_OUTPUT=caddy
-ARG           BUILD_FLAGS="-s -w"
+ARG           GIT_VERSION=v2.4.0
+ARG           GIT_COMMIT=bc2210247861340c644d9825ac2b2860f8c6e12a
+ARG           GO_BUILD_SOURCE=./cmd/caddy
+ARG           GO_BUILD_OUTPUT=caddy
+ARG           GO_LD_FLAGS="-s -w"
+ARG           GO_TAGS="netgo osusergo"
 
 WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone https://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v \
-                -ldflags "$BUILD_FLAGS" -o /dist/boot/bin/"$BUILD_OUTPUT" "$BUILD_TARGET"
+RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+# hadolint ignore=SC2046
+RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
+                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
 # Builder custom
 #######################
 # XXX mirror is suboptimal - it fails at the first network error, and does not "resume" the state - now favoring docker-aptly instead
-# hadolint ignore=DL3006,DL3029
 #FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS xxx-builder-mirror
 
 # April 2020
 #ARG           GIT_REPO=github.com/cybozu-go/aptutil
-#ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
+#ARG           GIT_COMMIT=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
 
 #WORKDIR       $GOPATH/src/$GIT_REPO
-#RUN           git clone git://$GIT_REPO .
-#RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-#RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
+#RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+# hadolint ignore=SC2046
+#RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags "-s -w" \
 #                -o /dist/boot/bin/apt-mirror ./cmd/go-apt-mirror/main.go
 
 #######################
 # Main builder
 #######################
-# hadolint ignore=DL3006,DL3029
 FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-main
 
 ARG           GIT_REPO=github.com/cybozu-go/aptutil
 # 1.4.2
-ARG           GIT_VERSION=0fc68affdeb0ca68409a17f2f712ab63b7c70b4a
-ARG           BUILD_TARGET=./cmd/go-apt-cacher/main.go
-ARG           BUILD_OUTPUT=apt-cacher
-ARG           BUILD_FLAGS="-s -w"
+ARG           GIT_COMMIT=0fc68affdeb0ca68409a17f2f712ab63b7c70b4a
+ARG           GO_BUILD_SOURCE=./cmd/go-apt-cacher/main.go
+ARG           GO_BUILD_OUTPUT=apt-cacher
+ARG           GO_LD_FLAGS="-s -w"
+ARG           GO_TAGS=""
 
 WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone git://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v \
-                -ldflags "$BUILD_FLAGS" -o /dist/boot/bin/"$BUILD_OUTPUT" "$BUILD_TARGET"
+RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+# hadolint ignore=SC2046
+RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
+                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
 # Builder assembly
 #######################
-# hadolint ignore=DL3006
 FROM          $BUILDER_BASE                                                                                             AS builder
 
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
@@ -115,10 +109,9 @@ RUN           chmod 555 /dist/boot/bin/*; \
 #######################
 # Running image
 #######################
-# hadolint ignore=DL3006
 FROM          $RUNTIME_BASE                                                                                             AS runtime
 
-COPY          --from=builder --chown=$BUILD_UID:root /dist .
+COPY          --from=builder --chown=$BUILD_UID:root /dist /
 
 ### Front server configuration
 # Port to use
