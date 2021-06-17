@@ -1,12 +1,13 @@
-ARG           BUILDER_BASE=dubodubonduponey/base@sha256:b51f084380bc1bd2b665840317b6f19ccc844ee2fc7e700bf8633d95deba2819
-ARG           RUNTIME_BASE=dubodubonduponey/base@sha256:d28e8eed3e87e8dc5afdd56367d3cf2da12a0003d064b5c62405afbe4725ee99
+ARG           FROM_IMAGE_BUILDER=ghcr.io/dubo-dubon-duponey/base:builder-bullseye-2021-06-01@sha256:addbd9b89d8973df985d2d95e22383961ba7b9c04580ac6a7f406a3a9ec4731e
+ARG           FROM_IMAGE_RUNTIME=ghcr.io/dubo-dubon-duponey/base:runtime-bullseye-2021-06-01@sha256:a2b1b2f69ed376bd6ffc29e2d240e8b9d332e78589adafadb84c73b778e6bc77
 
 #######################
 # Extra builder for healthchecker
 #######################
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-healthcheck
+FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-healthcheck
 
 ARG           GIT_REPO=github.com/dubo-dubon-duponey/healthcheckers
+ARG           GIT_VERSION=51ebf8c
 ARG           GIT_COMMIT=51ebf8ca3d255e0c846307bf72740f731e6210c3
 ARG           GO_BUILD_SOURCE=./cmd/http
 ARG           GO_BUILD_OUTPUT=http-health
@@ -25,9 +26,10 @@ RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -tr
 #######################
 # Goello
 #######################
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-goello
+FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-goello
 
 ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
+ARG           GIT_VERSION=3799b60
 ARG           GIT_COMMIT=3799b6035dd5c4d5d1c061259241a9bedda810d6
 ARG           GO_BUILD_SOURCE=./cmd/server
 ARG           GO_BUILD_OUTPUT=goello-server
@@ -46,7 +48,7 @@ RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -tr
 #######################
 # Caddy
 #######################
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-caddy
+FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-caddy
 
 # This is 2.4.0
 ARG           GIT_REPO=github.com/caddyserver/caddy
@@ -70,7 +72,7 @@ RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -tr
 # Builder custom
 #######################
 # XXX mirror is suboptimal - it fails at the first network error, and does not "resume" the state - now favoring docker-aptly instead
-#FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS xxx-builder-mirror
+#FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS xxx-builder-mirror
 
 # April 2020
 #ARG           GIT_REPO=github.com/cybozu-go/aptutil
@@ -85,10 +87,10 @@ RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -tr
 #######################
 # Main builder
 #######################
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-main
+FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-main
 
 ARG           GIT_REPO=github.com/cybozu-go/aptutil
-# 1.4.2
+ARG           GIT_VERSION=v1.4.2
 ARG           GIT_COMMIT=0fc68affdeb0ca68409a17f2f712ab63b7c70b4a
 ARG           GO_BUILD_SOURCE=./cmd/go-apt-cacher/main.go
 ARG           GO_BUILD_OUTPUT=apt-cacher
@@ -107,7 +109,7 @@ RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -tr
 #######################
 # Builder assembly
 #######################
-FROM          $BUILDER_BASE                                                                                             AS builder
+FROM          $FROM_IMAGE_BUILDER                                                                                       AS builder
 
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 COPY          --from=builder-goello /dist/boot/bin /dist/boot/bin
@@ -121,7 +123,7 @@ RUN           chmod 555 /dist/boot/bin/*; \
 #######################
 # Running image
 #######################
-FROM          $RUNTIME_BASE                                                                                             AS runtime
+FROM          $FROM_IMAGE_RUNTIME                                                                                       AS runtime
 
 COPY          --from=builder --chown=$BUILD_UID:root /dist /
 
