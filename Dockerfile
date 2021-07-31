@@ -1,120 +1,79 @@
-ARG           FROM_IMAGE_BUILDER=ghcr.io/dubo-dubon-duponey/base:builder-bullseye-2021-06-01@sha256:addbd9b89d8973df985d2d95e22383961ba7b9c04580ac6a7f406a3a9ec4731e
-ARG           FROM_IMAGE_RUNTIME=ghcr.io/dubo-dubon-duponey/base:runtime-bullseye-2021-06-01@sha256:a2b1b2f69ed376bd6ffc29e2d240e8b9d332e78589adafadb84c73b778e6bc77
+ARG           FROM_REGISTRY=ghcr.io/dubo-dubon-duponey
+
+ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-07-01@sha256:dbe45d04091f027b371e1bd4ea994f095a8b2ebbdd89357c56638fb678218151
+ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-07-01@sha256:63060b5109c4d8be7a8b4f97e3bb7431781c07b3b46263e372ab37fb8aae7583
+ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-07-01@sha256:188493744d1b858e0d99efc250b8b78852ddb3fe50eb63d46f41ee20680c14eb
+
+FROM          $FROM_REGISTRY/$FROM_IMAGE_TOOLS                                                                          AS builder-tools
 
 #######################
-# Extra builder for healthchecker
+# Fetcher
 #######################
-FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-healthcheck
+FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_BUILDER                                              AS fetcher-main
 
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/healthcheckers
-ARG           GIT_VERSION=51ebf8c
-ARG           GIT_COMMIT=51ebf8ca3d255e0c846307bf72740f731e6210c3
-ARG           GO_BUILD_SOURCE=./cmd/http
-ARG           GO_BUILD_OUTPUT=http-health
-ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS="netgo osusergo"
+#ENV           GIT_REPO=github.com/cybozu-go/aptutil
+#ENV           GIT_COMMIT=0fc68affdeb0ca68409a17f2f712ab63b7c70b4a
+#ENV           GIT_VERSION=v1.4.2
+ENV           GIT_REPO=github.com/dubo-dubon-duponey/aptutil
+ENV           GIT_VERSION=cfbb867
+ENV           GIT_COMMIT=cfbb867dad74abe86c013cab127361db4b7bf8ec
 
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-ARG           GOOS="$TARGETOS"
-ARG           GOARCH="$TARGETARCH"
+ENV           WITH_BUILD_SOURCE="./cmd/go-apt-cacher/main.go"
+ENV           WITH_BUILD_OUTPUT="apt-cacher"
 
-# hadolint ignore=SC2046
-RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
-                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
+RUN           git clone --recurse-submodules git://"$GIT_REPO" .
+RUN           git checkout "$GIT_COMMIT"
+RUN           --mount=type=secret,id=CA \
+              --mount=type=secret,id=NETRC \
+              [[ "${GOFLAGS:-}" == *-mod=vendor* ]] || go mod download
 
-#######################
-# Goello
-#######################
-FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-goello
-
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
-ARG           GIT_VERSION=3799b60
-ARG           GIT_COMMIT=3799b6035dd5c4d5d1c061259241a9bedda810d6
-ARG           GO_BUILD_SOURCE=./cmd/server
-ARG           GO_BUILD_OUTPUT=goello-server
-ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS="netgo osusergo"
-
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-ARG           GOOS="$TARGETOS"
-ARG           GOARCH="$TARGETARCH"
-
-# hadolint ignore=SC2046
-RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
-                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
-
-#######################
-# Caddy
-#######################
-FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-caddy
-
-# This is 2.4.0
-ARG           GIT_REPO=github.com/caddyserver/caddy
-ARG           GIT_VERSION=v2.4.0
-ARG           GIT_COMMIT=bc2210247861340c644d9825ac2b2860f8c6e12a
-ARG           GO_BUILD_SOURCE=./cmd/caddy
-ARG           GO_BUILD_OUTPUT=caddy
-ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS="netgo osusergo"
-
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-ARG           GOOS="$TARGETOS"
-ARG           GOARCH="$TARGETARCH"
-
-# hadolint ignore=SC2046
-RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
-                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
-
-#######################
-# Builder custom
-#######################
-# XXX mirror is suboptimal - it fails at the first network error, and does not "resume" the state - now favoring docker-aptly instead
-#FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS xxx-builder-mirror
-
-# April 2020
-#ARG           GIT_REPO=github.com/cybozu-go/aptutil
-#ARG           GIT_COMMIT=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
-
-#WORKDIR       $GOPATH/src/$GIT_REPO
-#RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-# hadolint ignore=SC2046
-#RUN           go build -trimpath -ldflags "-s -w" \
-#                -o /dist/boot/bin/apt-mirror ./cmd/go-apt-mirror/main.go
 
 #######################
 # Main builder
 #######################
-FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-main
+FROM          --platform=$BUILDPLATFORM fetcher-main                                                                    AS builder-main
 
-ARG           GIT_REPO=github.com/cybozu-go/aptutil
-ARG           GIT_VERSION=v1.4.2
-ARG           GIT_COMMIT=0fc68affdeb0ca68409a17f2f712ab63b7c70b4a
-ARG           GO_BUILD_SOURCE=./cmd/go-apt-cacher/main.go
-ARG           GO_BUILD_OUTPUT=apt-cacher
-ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS="netgo osusergo"
+ARG           TARGETARCH
+ARG           TARGETOS
+ARG           TARGETVARIANT
+ENV           GOOS=$TARGETOS
+ENV           GOARCH=$TARGETARCH
 
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-ARG           GOOS="$TARGETOS"
-ARG           GOARCH="$TARGETARCH"
+ENV           CGO_CFLAGS="${CFLAGS:-} ${ENABLE_PIE:+-fPIE}"
+ENV           GOFLAGS="-trimpath ${ENABLE_PIE:+-buildmode=pie} ${GOFLAGS:-}"
 
-# hadolint ignore=SC2046
-RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
-                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
+# Important cases being handled:
+# - cannot compile statically with PIE but on amd64 and arm64
+# - cannot compile fully statically with NETCGO
+RUN           export GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)"; \
+              [ "${CGO_ENABLED:-}" != 1 ] || { \
+                eval "$(dpkg-architecture -A "$(echo "$TARGETARCH$TARGETVARIANT" | sed -e "s/armv6/armel/" -e "s/armv7/armhf/" -e "s/ppc64le/ppc64el/" -e "s/386/i386/")")"; \
+                export PKG_CONFIG="${DEB_TARGET_GNU_TYPE}-pkg-config"; \
+                export AR="${DEB_TARGET_GNU_TYPE}-ar"; \
+                export CC="${DEB_TARGET_GNU_TYPE}-gcc"; \
+                export CXX="${DEB_TARGET_GNU_TYPE}-g++"; \
+                [ ! "${ENABLE_STATIC:-}" ] || { \
+                  [ ! "${WITH_CGO_NET:-}" ] || { \
+                    ENABLE_STATIC=; \
+                    LDFLAGS="${LDFLAGS:-} -static-libgcc -static-libstdc++"; \
+                  }; \
+                  [ "$GOARCH" == "amd64" ] || [ "$GOARCH" == "arm64" ] || [ "${ENABLE_PIE:-}" != true ] || ENABLE_STATIC=; \
+                }; \
+                WITH_LDFLAGS="${WITH_LDFLAGS:-} -linkmode=external -extld="$CC" -extldflags \"${LDFLAGS:-} ${ENABLE_STATIC:+-static}${ENABLE_PIE:+-pie}\""; \
+                WITH_TAGS="${WITH_TAGS:-} cgo ${ENABLE_STATIC:+static static_build}"; \
+              }; \
+              go build -ldflags "-s -w -v ${WITH_LDFLAGS:-}" -tags "${WITH_TAGS:-} net${WITH_CGO_NET:+c}go osusergo" -o /dist/boot/bin/"$WITH_BUILD_OUTPUT" "$WITH_BUILD_SOURCE"
 
 #######################
 # Builder assembly
 #######################
-FROM          $FROM_IMAGE_BUILDER                                                                                       AS builder
+FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_BUILDER                                              AS builder
 
-COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-goello /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-caddy /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-main /dist/boot/bin /dist/boot/bin
+COPY          --from=builder-main   /dist/boot/bin          /dist/boot/bin
+
+COPY          --from=builder-tools  /boot/bin/goello-server /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/caddy         /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/http-health   /dist/boot/bin
 
 RUN           chmod 555 /dist/boot/bin/*; \
               epoch="$(date --date "$BUILD_CREATED" +%s)"; \
@@ -123,7 +82,7 @@ RUN           chmod 555 /dist/boot/bin/*; \
 #######################
 # Running image
 #######################
-FROM          $FROM_IMAGE_RUNTIME                                                                                       AS runtime
+FROM          $FROM_REGISTRY/$FROM_IMAGE_RUNTIME                                                                        AS runtime
 
 COPY          --from=builder --chown=$BUILD_UID:root /dist /
 
@@ -137,6 +96,8 @@ ENV           LOG_LEVEL="warn"
 ENV           DOMAIN="apt-cache.local"
 # Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt
 ENV           TLS="internal"
+# Either require_and_verify or verify_if_given
+ENV           MTLS_MODE="verify_if_given"
 
 # Realm in case access is authenticated
 ENV           REALM="My Precious Realm"
