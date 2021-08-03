@@ -1,14 +1,14 @@
 # listen_address is the listening address of go-apt-cacher.
 # Default is ":3142".
-listen_address = "127.0.0.1:3142"
+listen_address = "127.0.0.1:10042"
 
 # Interval to check updates for Release/InRelease files.
 # Default: 600 seconds
-check_interval = 600
+check_interval = 3600
 
 # Cache period for bad HTTP response statuses.
 # Default: 3 seconds
-cache_period = 1
+cache_period = 3
 
 # Directory for meta data files.
 # The directory owner must be the same as the process owner of go-apt-cacher.

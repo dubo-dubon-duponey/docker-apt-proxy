@@ -84,28 +84,44 @@ RUN           chmod 555 /dist/boot/bin/*; \
 #######################
 FROM          $FROM_REGISTRY/$FROM_IMAGE_RUNTIME                                                                        AS runtime
 
-ENV           NICK="apt-utils"
+# Specific to this image
+ENV           NICK="apt-proxy"
+ENV           IS_PROXY=false
 
 COPY          --from=builder --chown=$BUILD_UID:root /dist /
 
 ### Front server configuration
 # Port to use
 ENV           PORT=4443
+ENV           PORT_HTTP=8080
 EXPOSE        4443
+EXPOSE        8080
 # Log verbosity for
 ENV           LOG_LEVEL="warn"
 # Domain name to serve
 ENV           DOMAIN="$NICK.local"
+ENV           ADDITIONAL_DOMAINS="https://*.debian.org"
+
+# Whether the server should behave as a proxy (disallows mTLS)
+ENV           SERVER_NAME="DuboDubonDuponey/1.0 (Caddy/2) [$NICK]"
+
 # Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt
 ENV           TLS="internal"
+# 1.2 or 1.3
+ENV           TLS_MIN=1.2
 # Either require_and_verify or verify_if_given
-ENV           MTLS_MODE="verify_if_given"
+ENV           TLS_MTLS_MODE="verify_if_given"
+# Issuer name to appear in certificates
+ENV           TLS_ISSUER="Dubo Dubon Duponey"
+# Either disable_redirects or ignore_loaded_certs if one wants the redirects
+ENV           TLS_AUTO=disable_redirects
 
+ENV           AUTH_ENABLED=false
 # Realm in case access is authenticated
-ENV           REALM="My Precious Realm"
+ENV           AUTH_REALM="My Precious Realm"
 # Provide username and password here (call the container with the "hash" command to generate a properly encrypted password, otherwise, a random one will be generated)
-ENV           USERNAME=""
-ENV           PASSWORD=""
+ENV           AUTH_USERNAME="dubo-dubon-duponey"
+ENV           AUTH_PASSWORD="replace_me"
 
 ### mDNS broadcasting
 # Enable/disable mDNS support

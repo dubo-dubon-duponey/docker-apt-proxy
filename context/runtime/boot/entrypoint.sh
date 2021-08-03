@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -o errexit -o errtrace -o functrace -o nounset -o pipefail
 
+[ "${IS_PROXY:-}" == true ] && IS_PROXY=proxy || IS_PROXY=noproxy;
+
 [ -w /certs ] || {
   printf >&2 "/certs is not writable. Check your mount permissions.\n"
   exit 1
@@ -27,11 +29,11 @@ case "${1:-run}" in
   ;;
   # Helper to get the ca.crt out (once initialized)
   "cert")
-    if [ "$TLS" == "" ]; then
+    if [ "${TLS:-}" == "" ]; then
       printf >&2 "Your container is not configured for TLS termination - there is no local CA in that case."
       exit 1
     fi
-    if [ "$TLS" != "internal" ]; then
+    if [ "${TLS:-}" != "internal" ]; then
       printf >&2 "Your container uses letsencrypt - there is no local CA in that case."
       exit 1
     fi
@@ -49,11 +51,15 @@ case "${1:-run}" in
     fi
 
     # If we want TLS and authentication, start caddy in the background
-    if [ "$TLS" ]; then
-      HOME=/tmp/caddy-home exec caddy run -config /config/caddy/main.conf --adapter caddyfile &
+    if [ "${TLS:-}" ]; then
+      HOME=/tmp/caddy-home caddy run -config /config/caddy/main.conf --adapter caddyfile &
     fi
   ;;
 esac
 
 # Start the cacher itself
-apt-cacher -f /config/apt-cacher/main.toml -logfile /dev/stdout -logformat "${APT_LOG_FORMAT:-plain}" -loglevel "${LOG_LEVEL:-error}" "$@"
+exec apt-cacher \
+  -f /config/apt-cacher/main.toml \
+  -logfile /dev/stdout \
+  -logformat "${APT_LOG_FORMAT:-plain}" \
+  -loglevel "$(printf "%s" "${LOG_LEVEL:-error}" | tr '[:upper:]' '[:lower:]' | sed -i 's/^(warn)$/warning/')" "$@"
