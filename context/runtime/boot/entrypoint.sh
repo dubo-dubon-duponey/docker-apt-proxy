@@ -62,4 +62,4 @@ exec apt-cacher \
   -f /config/apt-cacher/main.toml \
   -logfile /dev/stdout \
   -logformat "${APT_LOG_FORMAT:-plain}" \
-  -loglevel "$(printf "%s" "${LOG_LEVEL:-error}" | tr '[:upper:]' '[:lower:]' | sed -i 's/^(warn)$/warning/')" "$@"
+  -loglevel "$(printf "%s" "${LOG_LEVEL:-error}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^(warn)$/warning/')" "$@"
