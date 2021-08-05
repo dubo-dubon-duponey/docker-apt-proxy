@@ -21,8 +21,7 @@ ENV           GIT_COMMIT=cfbb867dad74abe86c013cab127361db4b7bf8ec
 ENV           WITH_BUILD_SOURCE="./cmd/go-apt-cacher/main.go"
 ENV           WITH_BUILD_OUTPUT="apt-cacher"
 
-RUN           git clone --recurse-submodules git://"$GIT_REPO" .
-RUN           git checkout "$GIT_COMMIT"
+RUN           git clone --recurse-submodules git://"$GIT_REPO" .; git checkout "$GIT_COMMIT"
 RUN           --mount=type=secret,id=CA \
               --mount=type=secret,id=NETRC \
               [[ "${GOFLAGS:-}" == *-mod=vendor* ]] || go mod download
