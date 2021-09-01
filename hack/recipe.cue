@@ -29,13 +29,13 @@ cakes: {
 
 			output: {
 				images: {
-					names: [...string] | * ["aptutil"],
+					names: [...string] | * ["apt-proxy"],
 					tags: [...string] | * ["latest"]
 				}
 			}
 
 			metadata: {
-				title: string | * "Dubo Aptutil",
+				title: string | * "Dubo Apt Proxy",
 				description: string | * "A dubo image for Aptutil",
 			}
 		}
