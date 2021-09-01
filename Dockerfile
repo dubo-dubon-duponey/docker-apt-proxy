@@ -1,133 +1,149 @@
-ARG           BUILDER_BASE=dubodubonduponey/base@sha256:b51f084380bc1bd2b665840317b6f19ccc844ee2fc7e700bf8633d95deba2819
-ARG           RUNTIME_BASE=dubodubonduponey/base@sha256:d28e8eed3e87e8dc5afdd56367d3cf2da12a0003d064b5c62405afbe4725ee99
+ARG           FROM_REGISTRY=ghcr.io/dubo-dubon-duponey
+
+ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-09-01@sha256:12be2a6d0a64b59b1fc44f9b420761ad92efe8188177171163b15148b312481a
+ARG           FROM_IMAGE_AUDITOR=base:auditor-bullseye-2021-09-01@sha256:28d5eddcbbee12bc671733793c8ea8302d7d79eb8ab9ba0581deeacabd307cf5
+ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-09-01@sha256:bbd3439247ea1aa91b048e77c8b546369138f910b5083de697f0d36ac21c1a8c
+ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-09-01@sha256:e5535efb771ca60d2a371cd2ca2eb1a7d6b7b13cc5c4d27d48613df1a041431d
+
+FROM          $FROM_REGISTRY/$FROM_IMAGE_TOOLS                                                                          AS builder-tools
 
 #######################
-# Extra builder for healthchecker
+# Fetcher
 #######################
-# hadolint ignore=DL3006,DL3029
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-healthcheck
+FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_BUILDER                                              AS fetcher-main
 
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/healthcheckers
-ARG           GIT_VERSION=51ebf8ca3d255e0c846307bf72740f731e6210c3
+#ARG           GIT_REPO=github.com/cybozu-go/aptutil
+#ARG           GIT_COMMIT=0fc68affdeb0ca68409a17f2f712ab63b7c70b4a
+#ARG           GIT_VERSION=v1.4.2
+ARG           GIT_REPO=github.com/dubo-dubon-duponey/aptutil
+ARG           GIT_VERSION=cfbb867
+ARG           GIT_COMMIT=cfbb867dad74abe86c013cab127361db4b7bf8ec
 
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone git://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
-                -o /dist/boot/bin/http-health ./cmd/http
+ENV           WITH_BUILD_SOURCE="./cmd/go-apt-cacher/main.go"
+ENV           WITH_BUILD_OUTPUT="apt-cacher"
 
-#######################
-# Goello
-#######################
-# hadolint ignore=DL3006,DL3029
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-goello
+RUN           git clone --recurse-submodules git://"$GIT_REPO" .; git checkout "$GIT_COMMIT"
+RUN           --mount=type=secret,id=CA \
+              --mount=type=secret,id=NETRC \
+              [[ "${GOFLAGS:-}" == *-mod=vendor* ]] || go mod download
 
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
-ARG           GIT_VERSION=6f6c96ef8161467ab25be45fe3633a093411fcf2
-
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone git://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
-                -o /dist/boot/bin/goello-server ./cmd/server/main.go
 
 #######################
-# Builder custom
+# Main builder
 #######################
-# XXX mirror is shit - it fails at the first network error, and does not "resume" the state
-# hadolint ignore=DL3006,DL3029
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-mirror
+FROM          --platform=$BUILDPLATFORM fetcher-main                                                                    AS builder-main
 
-# April 2020
-ARG           GIT_REPO=github.com/cybozu-go/aptutil
-ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
+ARG           TARGETARCH
+ARG           TARGETOS
+ARG           TARGETVARIANT
+ENV           GOOS=$TARGETOS
+ENV           GOARCH=$TARGETARCH
 
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone git://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
-                -o /dist/boot/bin/apt-mirror ./cmd/go-apt-mirror/main.go
+ENV           CGO_CFLAGS="${CFLAGS:-} ${ENABLE_PIE:+-fPIE}"
+ENV           GOFLAGS="-trimpath ${ENABLE_PIE:+-buildmode=pie} ${GOFLAGS:-}"
 
-#######################
-# Builder custom (cacher)
-#######################
-# hadolint ignore=DL3006,DL3029
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-cacher
-
-# April 2020
-ARG           GIT_REPO=github.com/cybozu-go/aptutil
-ARG           GIT_VERSION=3f82d83844818cdd6a6d7dca3eca0f76d8a3fce5
-
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone git://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
-                -o /dist/boot/bin/apt-cacher ./cmd/go-apt-cacher/main.go
-
-#######################
-# Caddy
-#######################
-# hadolint ignore=DL3006,DL3029
-FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-caddy
-
-# This is 2.2.1 (11/16/2020)
-ARG           GIT_REPO=github.com/caddyserver/caddy
-ARG           GIT_VERSION=385adf5d878939c381c7f73c771771d34523a1a7
-
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone https://$GIT_REPO .
-RUN           git checkout $GIT_VERSION
-
-# hadolint ignore=DL4006
-RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
-                -o /dist/boot/bin/caddy ./cmd/caddy
+# Important cases being handled:
+# - cannot compile statically with PIE but on amd64 and arm64
+# - cannot compile fully statically with NETCGO
+RUN           export GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)"; \
+              [ "${CGO_ENABLED:-}" != 1 ] || { \
+                eval "$(dpkg-architecture -A "$(echo "$TARGETARCH$TARGETVARIANT" | sed -e "s/^armv6$/armel/" -e "s/^armv7$/armhf/" -e "s/^ppc64le$/ppc64el/" -e "s/^386$/i386/")")"; \
+                export PKG_CONFIG="${DEB_TARGET_GNU_TYPE}-pkg-config"; \
+                export AR="${DEB_TARGET_GNU_TYPE}-ar"; \
+                export CC="${DEB_TARGET_GNU_TYPE}-gcc"; \
+                export CXX="${DEB_TARGET_GNU_TYPE}-g++"; \
+                [ ! "${ENABLE_STATIC:-}" ] || { \
+                  [ ! "${WITH_CGO_NET:-}" ] || { \
+                    ENABLE_STATIC=; \
+                    LDFLAGS="${LDFLAGS:-} -static-libgcc -static-libstdc++"; \
+                  }; \
+                  [ "$GOARCH" == "amd64" ] || [ "$GOARCH" == "arm64" ] || [ "${ENABLE_PIE:-}" != true ] || ENABLE_STATIC=; \
+                }; \
+                WITH_LDFLAGS="${WITH_LDFLAGS:-} -linkmode=external -extld="$CC" -extldflags \"${LDFLAGS:-} ${ENABLE_STATIC:+-static}${ENABLE_PIE:+-pie}\""; \
+                WITH_TAGS="${WITH_TAGS:-} cgo ${ENABLE_STATIC:+static static_build}"; \
+              }; \
+              go build -ldflags "-s -w -v ${WITH_LDFLAGS:-}" -tags "${WITH_TAGS:-} net${WITH_CGO_NET:+c}go osusergo" -o /dist/boot/bin/"$WITH_BUILD_OUTPUT" "$WITH_BUILD_SOURCE"
 
 #######################
 # Builder assembly
 #######################
-# hadolint ignore=DL3006
-FROM          $BUILDER_BASE                                                                                             AS builder
+FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_AUDITOR                                              AS builder
 
-COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-cacher /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-caddy /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-goello /dist/boot/bin /dist/boot/bin
+COPY          --from=builder-main   /dist/boot          /dist/boot
+
+COPY          --from=builder-tools  /boot/bin/goello-server /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/caddy         /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/http-health   /dist/boot/bin
+
+RUN           setcap 'cap_net_bind_service+ep' /dist/boot/bin/caddy
 
 RUN           chmod 555 /dist/boot/bin/*; \
               epoch="$(date --date "$BUILD_CREATED" +%s)"; \
-              find /dist/boot/bin -newermt "@$epoch" -exec touch --no-dereference --date="@$epoch" '{}' +;
+              find /dist/boot -newermt "@$epoch" -exec touch --no-dereference --date="@$epoch" '{}' +;
 
 #######################
 # Running image
 #######################
-# hadolint ignore=DL3006
-FROM          $RUNTIME_BASE                                                                                             AS runtime
+FROM          $FROM_REGISTRY/$FROM_IMAGE_RUNTIME                                                                        AS runtime
 
-COPY          --from=builder --chown=$BUILD_UID:root /dist .
+# Specific to this image
+ENV           NICK="apt-proxy"
+ENV           IS_PROXY=false
 
-EXPOSE        8080/tcp
+COPY          --from=builder --chown=$BUILD_UID:root /dist /
 
+### Front server configuration
+# Port to use
+ENV           PORT=4443
+ENV           PORT_HTTP=8080
+EXPOSE        4443
+EXPOSE        8080
+# Log verbosity for
+ENV           LOG_LEVEL="warn"
+# Domain name to serve
+ENV           DOMAIN="$NICK.local"
+ENV           ADDITIONAL_DOMAINS="https://*.debian.org"
+
+# Whether the server should behave as a proxy (disallows mTLS)
+ENV           SERVER_NAME="DuboDubonDuponey/1.0 (Caddy/2) [$NICK]"
+
+# Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt
+ENV           TLS="internal"
+# 1.2 or 1.3
+ENV           TLS_MIN=1.2
+# Either require_and_verify or verify_if_given
+ENV           TLS_MTLS_MODE="verify_if_given"
+# Issuer name to appear in certificates
+#ENV           TLS_ISSUER="Dubo Dubon Duponey"
+# Either disable_redirects or ignore_loaded_certs if one wants the redirects
+ENV           TLS_AUTO=disable_redirects
+
+ENV           AUTH_ENABLED=false
+# Realm in case access is authenticated
+ENV           AUTH_REALM="My Precious Realm"
+# Provide username and password here (call the container with the "hash" command to generate a properly encrypted password, otherwise, a random one will be generated)
+ENV           AUTH_USERNAME="dubo-dubon-duponey"
+ENV           AUTH_PASSWORD="cmVwbGFjZV9tZV93aXRoX3NvbWV0aGluZwo="
+
+### mDNS broadcasting
+# Enable/disable mDNS support
+ENV           MDNS_ENABLED=false
+# Name is used as a short description for the service
+ENV           MDNS_NAME="$NICK mDNS display name"
+# The service will be annonced and reachable at $MDNS_HOST.local
+ENV           MDNS_HOST="$NICK"
+# Type to advertise
+ENV           MDNS_TYPE="_http._tcp"
+
+# Caddy certs will be stored here
+VOLUME        /certs
+
+# Caddy uses this
+VOLUME        /tmp
+
+# Used by the backend service
 VOLUME        /data
 
-# mDNS
-ENV           MDNS_NAME="Fancy Apt Cache Service Name"
-ENV           MDNS_HOST="apt-cache"
-ENV           MDNS_TYPE=_apt._tcp
+ENV           HEALTHCHECK_URL="http://127.0.0.1:10000/?healthcheck"
 
-# Authentication
-ENV           USERNAME="dubo-dubon-duponey"
-ENV           PASSWORD="base64_bcrypt_encoded_use_caddy_hash_password_to_generate"
-ENV           REALM="My precious cacher"
-
-# Log level and port
-ENV           LOG_LEVEL=info
-ENV           PORT=8080
-
-# System constants, unlikely to ever require modifications in normal use
-ENV           HEALTHCHECK_URL="http://127.0.0.1:3142/archive?healthcheck=internal"
-
-HEALTHCHECK   --interval=30s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
+HEALTHCHECK   --interval=120s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
