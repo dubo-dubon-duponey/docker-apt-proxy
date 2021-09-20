@@ -1,9 +1,9 @@
 ARG           FROM_REGISTRY=ghcr.io/dubo-dubon-duponey
 
-ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-09-01@sha256:12be2a6d0a64b59b1fc44f9b420761ad92efe8188177171163b15148b312481a
-ARG           FROM_IMAGE_AUDITOR=base:auditor-bullseye-2021-09-01@sha256:28d5eddcbbee12bc671733793c8ea8302d7d79eb8ab9ba0581deeacabd307cf5
-ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-09-01@sha256:bbd3439247ea1aa91b048e77c8b546369138f910b5083de697f0d36ac21c1a8c
-ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-09-01@sha256:e5535efb771ca60d2a371cd2ca2eb1a7d6b7b13cc5c4d27d48613df1a041431d
+ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-09-15@sha256:a3d4c4de18d540fe3cb07e267511ba2afd5578f18840cd73c063277672e74119
+ARG           FROM_IMAGE_AUDITOR=base:auditor-bullseye-2021-09-15@sha256:6360e479e39b3c8e1491f599609039544e4e804595fcc8055e29d8615566fb3e
+ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-09-15@sha256:71341017729371c120ad7e97699c1d0aa39c7478cf4dbe67a0083680cf7b8e73
+ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-09-15@sha256:4271d38084f446152f778f343c8878508ee7a833c282ea0c418f9f80123b1c46
 
 FROM          $FROM_REGISTRY/$FROM_IMAGE_TOOLS                                                                          AS builder-tools
 
@@ -88,16 +88,15 @@ FROM          $FROM_REGISTRY/$FROM_IMAGE_RUNTIME                                
 
 # Specific to this image
 ENV           NICK="apt-proxy"
-ENV           IS_PROXY=false
 
 COPY          --from=builder --chown=$BUILD_UID:root /dist /
 
 ### Front server configuration
 # Port to use
-ENV           PORT=4443
-ENV           PORT_HTTP=8080
-EXPOSE        4443
-EXPOSE        8080
+ENV           PORT_HTTPS=443
+ENV           PORT_HTTP=80
+EXPOSE        443
+EXPOSE        80
 # Log verbosity for
 ENV           LOG_LEVEL="warn"
 # Domain name to serve
@@ -107,33 +106,35 @@ ENV           ADDITIONAL_DOMAINS="https://*.debian.org"
 # Whether the server should behave as a proxy (disallows mTLS)
 ENV           SERVER_NAME="DuboDubonDuponey/1.0 (Caddy/2) [$NICK]"
 
-# Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt
+# Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt - use "" to disable TLS entirely
 ENV           TLS="internal"
 # 1.2 or 1.3
-ENV           TLS_MIN=1.2
-# Either require_and_verify or verify_if_given
-ENV           TLS_MTLS_MODE="verify_if_given"
+ENV           TLS_MIN=1.3
 # Issuer name to appear in certificates
 #ENV           TLS_ISSUER="Dubo Dubon Duponey"
 # Either disable_redirects or ignore_loaded_certs if one wants the redirects
 ENV           TLS_AUTO=disable_redirects
 
-ENV           AUTH_ENABLED=false
-# Realm in case access is authenticated
-ENV           AUTH_REALM="My Precious Realm"
+# Either require_and_verify or verify_if_given, or "" to disable mTLS altogether
+ENV           MTLS="verify_if_given"
+# Root certificate to trust for mTLS
+ENV           MTLS_TRUST="/certs/pki/authorities/local/root.crt"
+
+# Realm for authentication - set to "" to disable authentication entirely
+ENV           AUTH="My Precious Realm"
 # Provide username and password here (call the container with the "hash" command to generate a properly encrypted password, otherwise, a random one will be generated)
 ENV           AUTH_USERNAME="dubo-dubon-duponey"
 ENV           AUTH_PASSWORD="cmVwbGFjZV9tZV93aXRoX3NvbWV0aGluZwo="
 
 ### mDNS broadcasting
-# Enable/disable mDNS support
-ENV           MDNS_ENABLED=false
+# Type to advertise - set to empty string to disable mDNS altogether
+ENV           MDNS="_http._tcp"
 # Name is used as a short description for the service
 ENV           MDNS_NAME="$NICK mDNS display name"
 # The service will be annonced and reachable at $MDNS_HOST.local
 ENV           MDNS_HOST="$NICK"
-# Type to advertise
-ENV           MDNS_TYPE="_http._tcp"
+# Also announce the service as a workstation (for example for the benefit of coreDNS mDNS)
+ENV           MDNS_STATION=true
 
 # Caddy certs will be stored here
 VOLUME        /certs

@@ -1,65 +1,151 @@
 #!/usr/bin/env bash
 set -o errexit -o errtrace -o functrace -o nounset -o pipefail
 
-[ "${IS_PROXY:-}" == true ] && IS_PROXY=proxy || IS_PROXY=noproxy;
-
-[ -w /certs ] || {
-  printf >&2 "/certs is not writable. Check your mount permissions.\n"
-  exit 1
+ensure::writable(){
+  local dir="$1"
+  printf >&2 "Verifying that %s is writable\n" "$dir"
+  [ -w "$dir" ] || {
+    printf >&2 "%s is not writable. Check your mount permissions.\n" "$dir"
+    exit 1
+  }
 }
 
-[ -w /tmp ] || {
-  printf >&2 "/tmp is not writable. Check your mount permissions.\n"
-  exit 1
+run::hash(){
+  printf >&2 "Generating password hash\n"
+  caddy hash-password -algorithm bcrypt "$@"
 }
 
-[ -w /data ] || {
-  printf >&2 "/data is not writable. Check your mount permissions.\n"
-  exit 1
+run::certificate(){
+  local tls_mode="$1"
+  printf >&2 "Displaying root certificate to trust\n"
+  if [ "$tls_mode" == "" ]; then
+    printf >&2 "Your container is not configured for TLS termination - there is no local CA in that case."
+    exit 1
+  fi
+  if [ "$tls_mode" != "internal" ]; then
+    printf >&2 "Your container uses letsencrypt - there is no local CA in that case."
+    exit 1
+  fi
+  if [ ! -e /certs/pki/authorities/local/root.crt ]; then
+    printf >&2 "No root certificate installed or generated. Run the container so that a cert is generated, or provide one at runtime."
+    exit 1
+  fi
+  cat /certs/pki/authorities/local/root.crt
+}
+
+start::mdns(){
+  local type="$1"
+  local name="$2"
+  local host="$3"
+  local port="$4"
+  local workstation="${5:-true}"
+  local text="${6:-\{\}}"
+
+  local records
+
+  if [ "$workstation" == true ]; then
+    records="$(printf \
+      '[{"Type": "%s", "Name": "%s", "Host": "%s", "Port": %s, "Text": %s},
+      {"Type": "%s", "Name": "%s", "Host": "%s", "Port": %s, "Text": %s}]' \
+      "_workstation._tcp" "$name" "$host" "$port" "$text" \
+      "$type"             "$name" "$host" "$port" "$text" \
+    )"
+  else
+    records="$(printf \
+      '[{"Type": "%s", "Name": "%s", "Host": "%s", "Port": %s, "Text": %s}]' \
+      "$type"             "$name" "$host" "$port" "$text" \
+    )"
+  fi
+
+  goello-server -json "$records" &
+}
+
+start::sidecar(){
+  local disable_tls=""
+  local disable_mtls=""
+  local disable_auth=""
+
+  AUTH="${AUTH:-Authentication}"
+  TLS="${TLS:-internal}"
+  MTLS="${MTLS:-require_and_verify}"
+
+  local secure=s
+
+  [ "$MTLS" != "" ] || disable_mtls=true;
+  [ "$AUTH" != "" ] || disable_auth=true;
+  [ "$TLS" != "" ] || {
+    disable_tls=true
+    secure=
+  }
+
+  HOME=/tmp/caddy-home \
+  CDY_SERVER_NAME=${SERVER_NAME:-DuboDubonDuponey/1.0} \
+  CDY_LOG_LEVEL=${LOG_LEVEL:-error} \
+  CDY_SCHEME="http${secure:-}" \
+  CDY_DOMAIN="${DOMAIN:-}" \
+  CDY_ADDITIONAL_DOMAINS="${ADDITIONAL_DOMAINS:-}" \
+
+  CDY_AUTH_DISABLE="$disable_auth" \
+  CDY_AUTH_REALM="$AUTH" \
+  CDY_AUTH_USERNAME="${AUTH_USERNAME:-}" \
+  CDY_AUTH_PASSWORD="${AUTH_PASSWORD:-}" \
+
+  CDY_TLS_DISABLE="$disable_tls" \
+  CDY_TLS_MODE="$TLS" \
+  CDY_TLS_MIN="${TLS_MIN:-1.3}" \
+  CDY_TLS_AUTO="${TLS_AUTO:-disable_redirects}" \
+
+  CDY_MTLS_DISABLE="$disable_mtls" \
+  CDY_MTLS_MODE="$MTLS" \
+  CDY_MTLS_TRUST="${MTLS_TRUST:-}" \
+
+  CDY_HEALTHCHECK_URL="$HEALTHCHECK_URL" \
+  CDY_PORT_HTTP="$PORT_HTTP" \
+  CDY_PORT_HTTPS="$PORT_HTTPS" \
+    caddy run -config /config/caddy/main.conf --adapter caddyfile &
+}
+
+start::service(){
+  local log_format="${1:-}"
+  local log_level="${2:-}"
+  exec apt-cacher \
+    -f /config/apt-cacher/main.toml \
+    -logfile /dev/stdout \
+    -logformat "$log_format" \
+    -loglevel "$(printf "%s" "${log_level}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^(warn)$/warning/')" "$@"
 }
 
 # Helpers
-case "${1:-run}" in
+case "${1:-}" in
   # Short hand helper to generate password hash
   "hash")
     shift
-    printf >&2 "Generating password hash\n"
-    caddy hash-password -algorithm bcrypt "$@"
+    run::hash "$@"
     exit
   ;;
   # Helper to get the ca.crt out (once initialized)
   "cert")
-    if [ "${TLS:-}" == "" ]; then
-      printf >&2 "Your container is not configured for TLS termination - there is no local CA in that case."
-      exit 1
-    fi
-    if [ "${TLS:-}" != "internal" ]; then
-      printf >&2 "Your container uses letsencrypt - there is no local CA in that case."
-      exit 1
-    fi
-    if [ ! -e /certs/pki/authorities/local/root.crt ]; then
-      printf >&2 "No root certificate installed or generated. Run the container so that a cert is generated, or provide one at runtime."
-      exit 1
-    fi
-    cat /certs/pki/authorities/local/root.crt
+    shift
+    run::certificate "${TLS:-}" "$@"
     exit
-  ;;
-  "run")
-    # Bonjour the container if asked to. While the PORT is no guaranteed to be mapped on the host in bridge, this does not matter since mDNS will not work at all in bridge mode.
-    if [ "${MDNS_ENABLED:-}" == true ]; then
-      goello-server -json "$(printf '[{"Type": "%s", "Name": "%s", "Host": "%s", "Port": %s, "Text": {}}]' "$MDNS_TYPE" "$MDNS_NAME" "$MDNS_HOST" "$PORT")" &
-    fi
-
-    # If we want TLS and authentication, start caddy in the background
-    if [ "${TLS:-}" ]; then
-      HOME=/tmp/caddy-home caddy run -config /config/caddy/main.conf --adapter caddyfile &
-    fi
   ;;
 esac
 
-# Start the cacher itself
-exec apt-cacher \
-  -f /config/apt-cacher/main.toml \
-  -logfile /dev/stdout \
-  -logformat "${APT_LOG_FORMAT:-plain}" \
-  -loglevel "$(printf "%s" "${LOG_LEVEL:-error}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^(warn)$/warning/')" "$@"
+ensure::writable "/certs"
+ensure::writable "/data"
+ensure::writable "/tmp"
+
+# Bonjour the container if asked to
+[ "${MDNS:-}" == "" ] || \
+  start::mdns \
+    "${MDNS:-_http._tcp}" \
+    "${MDNS_NAME:-service}" \
+    "${MDNS_HOST:-service}" \
+    "$([ "$TLS" != "" ] && printf "%s" "${PORT_HTTPS:-443}" || printf "%s" "${PORT_HTTP:-80}")"
+    "${MDNS_STATION:-true}"
+
+# Start the sidecar
+start::sidecar
+
+# Start the service
+start::service "${APT_LOG_FORMAT:-plain}" "${LOG_LEVEL:-error}" "$@"
