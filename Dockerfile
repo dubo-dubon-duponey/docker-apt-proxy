@@ -1,9 +1,9 @@
 ARG           FROM_REGISTRY=ghcr.io/dubo-dubon-duponey
 
-ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-09-15@sha256:a3d4c4de18d540fe3cb07e267511ba2afd5578f18840cd73c063277672e74119
-ARG           FROM_IMAGE_AUDITOR=base:auditor-bullseye-2021-09-15@sha256:6360e479e39b3c8e1491f599609039544e4e804595fcc8055e29d8615566fb3e
-ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-09-15@sha256:71341017729371c120ad7e97699c1d0aa39c7478cf4dbe67a0083680cf7b8e73
-ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-09-15@sha256:4271d38084f446152f778f343c8878508ee7a833c282ea0c418f9f80123b1c46
+ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-10-15@sha256:33e021267790132e63be2cea08e77d64ec5d0434355734e94f8ff2d90c6f8944
+ARG           FROM_IMAGE_AUDITOR=base:auditor-bullseye-2021-10-15@sha256:eb822683575d68ccbdf62b092e1715c676b9650a695d8c0235db4ed5de3e8534
+ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-10-15@sha256:7072702dab130c1bbff5e5c4a0adac9c9f2ef59614f24e7ee43d8730fae2764c
+ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-10-15@sha256:e8ec2d1d185177605736ba594027f27334e68d7984bbfe708a0b37f4b6f2dbd7
 
 FROM          $FROM_REGISTRY/$FROM_IMAGE_TOOLS                                                                          AS builder-tools
 
@@ -42,9 +42,6 @@ ENV           GOARCH=$TARGETARCH
 ENV           CGO_CFLAGS="${CFLAGS:-} ${ENABLE_PIE:+-fPIE}"
 ENV           GOFLAGS="-trimpath ${ENABLE_PIE:+-buildmode=pie} ${GOFLAGS:-}"
 
-# Important cases being handled:
-# - cannot compile statically with PIE but on amd64 and arm64
-# - cannot compile fully statically with NETCGO
 RUN           export GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)"; \
               [ "${CGO_ENABLED:-}" != 1 ] || { \
                 eval "$(dpkg-architecture -A "$(echo "$TARGETARCH$TARGETVARIANT" | sed -e "s/^armv6$/armel/" -e "s/^armv7$/armhf/" -e "s/^ppc64le$/ppc64el/" -e "s/^386$/i386/")")"; \
@@ -67,11 +64,11 @@ RUN           export GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)"; \
 #######################
 # Builder assembly
 #######################
-FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_AUDITOR                                              AS builder
+FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_AUDITOR                                              AS assembly
 
 COPY          --from=builder-main   /dist/boot          /dist/boot
 
-COPY          --from=builder-tools  /boot/bin/goello-server /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/goello-server-ng /dist/boot/bin
 COPY          --from=builder-tools  /boot/bin/caddy         /dist/boot/bin
 COPY          --from=builder-tools  /boot/bin/http-health   /dist/boot/bin
 
@@ -89,7 +86,7 @@ FROM          $FROM_REGISTRY/$FROM_IMAGE_RUNTIME                                
 # Specific to this image
 ENV           NICK="apt-proxy"
 
-COPY          --from=builder --chown=$BUILD_UID:root /dist /
+COPY          --from=assembly --chown=$BUILD_UID:root /dist /
 
 ### Front server configuration
 # Port to use
@@ -102,10 +99,8 @@ ENV           LOG_LEVEL="warn"
 # Domain name to serve
 ENV           DOMAIN="$NICK.local"
 ENV           ADDITIONAL_DOMAINS="https://*.debian.org"
-
 # Whether the server should behave as a proxy (disallows mTLS)
 ENV           SERVER_NAME="DuboDubonDuponey/1.0 (Caddy/2) [$NICK]"
-
 # Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt - use "" to disable TLS entirely
 ENV           TLS="internal"
 # 1.2 or 1.3
@@ -114,37 +109,30 @@ ENV           TLS_MIN=1.3
 #ENV           TLS_ISSUER="Dubo Dubon Duponey"
 # Either disable_redirects or ignore_loaded_certs if one wants the redirects
 ENV           TLS_AUTO=disable_redirects
-
 # Either require_and_verify or verify_if_given, or "" to disable mTLS altogether
-ENV           MTLS="verify_if_given"
+ENV           MTLS="require_and_verify"
 # Root certificate to trust for mTLS
-ENV           MTLS_TRUST="/certs/pki/authorities/local/root.crt"
-
+ENV           MTLS_TRUST="/certs/mtls_ca.crt"
 # Realm for authentication - set to "" to disable authentication entirely
 ENV           AUTH="My Precious Realm"
 # Provide username and password here (call the container with the "hash" command to generate a properly encrypted password, otherwise, a random one will be generated)
 ENV           AUTH_USERNAME="dubo-dubon-duponey"
 ENV           AUTH_PASSWORD="cmVwbGFjZV9tZV93aXRoX3NvbWV0aGluZwo="
-
 ### mDNS broadcasting
-# Type to advertise - set to empty string to disable mDNS altogether
-ENV           MDNS="_http._tcp"
+# Type to advertise
+ENV           MDNS_TYPE="_http._tcp"
 # Name is used as a short description for the service
 ENV           MDNS_NAME="$NICK mDNS display name"
-# The service will be annonced and reachable at $MDNS_HOST.local
+# The service will be annonced and reachable at $MDNS_HOST.local (set to empty string to disable mDNS announces entirely)
 ENV           MDNS_HOST="$NICK"
 # Also announce the service as a workstation (for example for the benefit of coreDNS mDNS)
 ENV           MDNS_STATION=true
-
 # Caddy certs will be stored here
 VOLUME        /certs
-
 # Caddy uses this
 VOLUME        /tmp
-
 # Used by the backend service
 VOLUME        /data
-
 ENV           HEALTHCHECK_URL="http://127.0.0.1:10000/?healthcheck"
 
 HEALTHCHECK   --interval=120s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
