@@ -66,13 +66,26 @@ RUN           export GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)"; \
 #######################
 FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_AUDITOR                                              AS assembly
 
-COPY          --from=builder-main   /dist/boot          /dist/boot
+COPY          --from=builder-main   /dist/boot                  /dist/boot
 
-COPY          --from=builder-tools  /boot/bin/goello-server-ng /dist/boot/bin
-COPY          --from=builder-tools  /boot/bin/caddy         /dist/boot/bin
-COPY          --from=builder-tools  /boot/bin/http-health   /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/goello-server-ng  /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/caddy             /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/http-health       /dist/boot/bin
 
 RUN           setcap 'cap_net_bind_service+ep' /dist/boot/bin/caddy
+
+# XXX fixed upstream - apt-cacher needs --help to test running
+RUN           RUNNING=true \
+                dubo-check validate /dist/boot/bin/caddy; \
+                dubo-check validate /dist/boot/bin/goello-server-ng; \
+                dubo-check validate /dist/boot/bin/http-health
+#                dubo-check validate /dist/boot/bin/apt-cacher
+
+RUN           RO_RELOCATIONS=true \
+                dubo-check validate /dist/boot/bin/caddy
+
+RUN           STATIC=true \
+                dubo-check validate /dist/boot/bin/*
 
 RUN           chmod 555 /dist/boot/bin/*; \
               epoch="$(date --date "$BUILD_CREATED" +%s)"; \
